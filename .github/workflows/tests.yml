@@ -1,3 +1,4 @@
+# .github/workflows/tests.yml
 name: Run Tests
 
 on:
@@ -15,6 +16,7 @@ jobs:
     env:
       DATABASE_URL: sqlite:///./test.db
       SECRET_KEY: test-secret-key
+      PYTHONUNBUFFERED: "1"
 
     steps:
       - name: Checkout code
@@ -30,5 +32,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Debug environment
+        run: |
+          python -V
+          pwd
+          ls -la
+          pip freeze
+
       - name: Run pytest
-        run: pytest -q
+        run: |
+          pytest -vv --maxfail=1 -ra --tb=long
