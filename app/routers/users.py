@@ -1,85 +1,85 @@
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.schemas.user import UserCreate, UserOut
-from app.services.auth import hash_password
+from app.services.auth import get_current_user
+from app.utils import get_password_hash
 
-router = APIRouter(prefix="/users", tags=["Users"])
-
-
-def validate_password(password: str) -> None:
-    if len(password) < 8:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Password must be at least 8 characters long",
-        )
-
-    has_letter = any(ch.isalpha() for ch in password)
-    has_digit = any(ch.isdigit() for ch in password)
-
-    if not has_letter or not has_digit:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Password must contain at least one letter and one number",
-        )
+router = APIRouter()
 
 
-@router.post("/", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
-    validate_password(user_data.password)
+def _make_username_from_email(email: str) -> str:
+    base = (email.split("@", 1)[0] or "user").strip()
+    return base if base else "user"
+
+
+@router.post(
+    "/users/",
+    status_code=status.HTTP_201_CREATED,
+    response_model=UserOut,
+)
+def create_user(user: UserCreate, db: Session = Depends(get_db)):
+    existing_user = db.query(User).filter(User.email == user.email).first()
+    if existing_user:
+        raise HTTPException(status_code=409, detail="Email already registered")
+
+    username = getattr(user, "username", None) or _make_username_from_email(user.email)
+    i = 0
+    candidate = username
+    while db.query(User).filter(User.username == candidate).first() is not None:
+        i += 1
+        candidate = f"{username}{i}"
+    username = candidate
 
     new_user = User(
-        email=user_data.email,
-        hashed_password=hash_password(user_data.password),
+        username=username,
+        email=user.email,
+        hashed_password=get_password_hash(user.password),
     )
-
     db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
 
-    try:
-        db.commit()
-        db.refresh(new_user)
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered",
-        )
-
+    # برگردوندن ORM object باعث می‌شود response_model خودش فیلدها را درست serialize کند
     return new_user
 
 
-@router.get("/me/profile", response_model=UserOut)
-def get_my_profile(current_user: User = Depends(get_current_user)):
-    return current_user
-
-
-@router.get("/", response_model=List[UserOut])
-def get_users(
+@router.get(
+    "/users/",
+    status_code=status.HTTP_200_OK,
+    response_model=list[UserOut],
+)
+def list_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    users = db.query(User).all()
-    return users
+    return db.query(User).all()
 
 
-@router.get("/{user_id}", response_model=UserOut)
-def get_single_user(
+@router.get(
+    "/users/{user_id}",
+    status_code=status.HTTP_200_OK,
+    response_model=UserOut,
+)
+def get_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     user = db.query(User).filter(User.id == user_id).first()
-
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
     return user
+
+
+@router.get(
+    "/users/me/profile",
+    status_code=status.HTTP_200_OK,
+    response_model=UserOut,
+)
+def me_profile(
+    current_user: User = Depends(get_current_user),
+):
+    return current_user

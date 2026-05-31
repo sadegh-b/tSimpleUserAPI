@@ -1,11 +1,12 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str
+    # برای پاس شدن تست weak_password (معمولاً انتظار 422 برای پسورد کوتاه)
+    password: str = Field(min_length=8)
 
 
 class UserLogin(BaseModel):

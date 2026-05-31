@@ -2,16 +2,22 @@ name: Run Tests
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches:
+      - main
   pull_request:
-    branches: [ "main", "master" ]
+    branches:
+      - main
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
+    env:
+      DATABASE_URL: sqlite:///./test.db
+      SECRET_KEY: test-secret-key
+
     steps:
-      - name: Checkout source code
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -25,7 +31,4 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run pytest
-        env:
-          PYTHONPATH: .
-        run: |
-          pytest -q
+        run: pytest -q
