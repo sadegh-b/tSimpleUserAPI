@@ -1,16 +1,25 @@
 # مسیر فایل: app/utils.py
+import bcrypt
 
-from passlib.context import CryptContext
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def get_password_hash(password: str) -> str:
-    # پسورد را به بایت تبدیل می‌کنیم
-    password_bytes = password.encode("utf-8")
+    # 1. تبدیل پسورد به بایت و محدود کردن به 72 بایت
+    password_bytes = password.encode("utf-8")[:72]
 
-    # اگر طول بایت‌ها بیشتر از 72 بود، فقط 72 تای اول را برمی‌داریم
-    # این همان کاری است که bcrypt به صورت استاندارد انجام می‌دهد
-    if len(password_bytes) > 72:
-        password_bytes = password_bytes[:72]
+    # 2. تولید سالت (Salt) و هش کردن
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
 
-    return pwd_context.hash(password_bytes)
+    # 3. بازگشت به صورت رشته (استرینگ)
+    return hashed.decode("utf-8")
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    # 1. تبدیل پسورد ورودی به بایت و محدود کردن به 72 بایت
+    password_bytes = plain_password.encode("utf-8")[:72]
+
+    # 2. تبدیل هش دیتابیس به بایت
+    hashed_password_bytes = hashed_password.encode("utf-8")
+
+    # 3. چک کردن پسورد
+    return bcrypt.checkpw(password_bytes, hashed_password_bytes)
